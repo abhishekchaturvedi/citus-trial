@@ -1,0 +1,48 @@
+version: '3'
+
+services:
+  master:
+    container_name: "${COMPOSE_PROJECT_NAME:-citus}_master"
+    image: 'citusdata/citus:9.4.0'
+    ports: ["${MASTER_EXTERNAL_PORT:-5432}:5432"]
+    labels: ['com.citusdata.role=Master']
+    environment: &AUTH
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "password"
+      PGUSER: "postgres"
+      PGPASSWORD: "password"
+      POSTGRES_HOST_AUTH_METHOD: "${POSTGRES_HOST_AUTH_METHOD:-trust}"
+  worker:
+    image: 'citusdata/citus:9.4.0'
+    labels: ['com.citusdata.role=Worker']
+    depends_on: [ manager ]
+    environment: *AUTH
+    command: "/wait-for-manager.sh"
+    volumes: 
+      - healthcheck-volume:/healthcheck
+  manager:
+    container_name: "${COMPOSE_PROJECT_NAME:-citus}_manager"
+    image: 'citusdata/membership-manager:0.3.0'
+    volumes: 
+      - "${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock"
+      - healthcheck-volume:/healthcheck
+    depends_on: [ master ]
+    environment: *AUTH
+  keycloak:
+      image: jboss/keycloak:4.1.0.Final
+      environment:
+        DB_VENDOR: POSTGRES
+        DB_ADDR: 0.0.0.0
+        DB_DATABASE: keycloak
+        DB_USER: "postgres"
+        DB_PASSWORD: "password"
+        KEYCLOAK_USER: "admin"
+        KEYCLOAK_PASSWORD: "testing"
+      ports:
+        - 8088:8080
+      volumes:
+        - ./themes/puretalent:/opt/jboss/keycloak/themes/puretalent
+      depends_on: [manager]
+    
+volumes:
+  healthcheck-volume:
